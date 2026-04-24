@@ -30,11 +30,19 @@ services:
   spark:
     image: apache/spark:3.5.0
     container_name: spark
-    ports:
-      - "8080:8080"
-      - "7077:7077"
+    depends_on:
+      - kafka
+    volumes:
+      - ./spark:/app
+      - ./ivy:/tmp/.ivy2
+    environment:
+      - HOME=/tmp
     command: >
-      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      /opt/spark/bin/spark-submit
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
+      --conf spark.driver.extraJavaOptions=-Divy.home=/tmp/.ivy2
+      --conf spark.executor.extraJavaOptions=-Divy.home=/tmp/.ivy2
+      /app/streaming.py
 
   mongodb:
     image: mongo:6
