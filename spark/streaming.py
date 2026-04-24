@@ -1,12 +1,13 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json
 from pyspark.sql.types import StructType, IntegerType
+from pymongo import MongoClient
 
 spark = SparkSession.builder \
-    .appName("KafkaStreaming") \
+    .appName("KafkaToMongo") \
     .getOrCreate()
 
-# 1. Lire depuis Kafka
+# Lire Kafka
 df = spark.readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "kafka:9092") \
@@ -14,24 +15,45 @@ df = spark.readStream \
     .option("startingOffsets", "earliest") \
     .load()
 
-# 2. Convertir value → string
+# Convertir
 df_string = df.selectExpr("CAST(value AS STRING)")
 
-# 3. Définir schema JSON
+# Schema
 schema = StructType() \
     .add("player_id", IntegerType()) \
     .add("score", IntegerType()) \
     .add("time", IntegerType())
 
-# 4. Parser JSON
+# Parser JSON
 df_parsed = df_string.select(
     from_json(col("value"), schema).alias("data")
 ).select("data.*")
 
-# 5. Affichage FINAL (IMPORTANT)
+# Fonction pour écrire dans MongoDB
+def write_to_mongo(batch_df, batch_id):
+    print(f"🚀 Writing batch {batch_id} to MongoDB")
+
+    batch_df.show(truncate=False)
+
+    data = batch_df.collect()
+
+    if len(data) == 0:
+        return
+
+    client = MongoClient("mongodb://mongodb:27017/")
+    db = client["game_db"]
+    collection = db["players"]
+
+    docs = [row.asDict() for row in data]
+
+    collection.insert_many(docs)
+
+    print(f"✅ Inserted {len(docs)} records")
+
+# Stream vers MongoDB
 query = df_parsed.writeStream \
     .outputMode("append") \
-    .format("console") \
+    .foreachBatch(write_to_mongo) \
     .start()
 
 query.awaitTermination()

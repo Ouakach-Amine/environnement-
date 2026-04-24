@@ -32,17 +32,21 @@ services:
     container_name: spark
     depends_on:
       - kafka
+      - mongodb
     volumes:
       - ./spark:/app
       - ./ivy:/tmp/.ivy2
     environment:
       - HOME=/tmp
     command: >
+      bash -c "
+      pip install pymongo &&
       /opt/spark/bin/spark-submit
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0
       --conf spark.driver.extraJavaOptions=-Divy.home=/tmp/.ivy2
       --conf spark.executor.extraJavaOptions=-Divy.home=/tmp/.ivy2
       /app/streaming.py
+      "
 
   mongodb:
     image: mongo:6
