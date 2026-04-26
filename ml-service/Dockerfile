@@ -6,4 +6,4 @@ COPY . .
 
 RUN pip install pandas scikit-learn numpy kafka-python pymongo
 
-CMD ["python", "model.py"]
+CMD ["bash", "-c", "python model.py && python fuzzy_ahp.py"]
