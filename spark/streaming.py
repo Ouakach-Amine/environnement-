@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json
-from pyspark.sql.types import StructType, IntegerType
+from pyspark.sql.types import StructType, IntegerType , DoubleType
 from pymongo import MongoClient
 
 spark = SparkSession.builder \
@@ -22,7 +22,14 @@ df_string = df.selectExpr("CAST(value AS STRING)")
 schema = StructType() \
     .add("player_id", IntegerType()) \
     .add("score", IntegerType()) \
-    .add("time", IntegerType())
+    .add("time", IntegerType()) \
+    .add("clicks", IntegerType()) \
+    .add("moves", IntegerType()) \
+    .add("errors", IntegerType()) \
+    .add("response_time", DoubleType()) \
+    .add("level", IntegerType()) \
+    .add("success", IntegerType()) \
+    .add("repetition", IntegerType())
 
 # Parser JSON
 df_parsed = df_string.select(

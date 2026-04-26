@@ -4,6 +4,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install scikit-learn numpy kafka-python pymongo
+RUN pip install pandas scikit-learn numpy kafka-python pymongo
 
 CMD ["python", "model.py"]

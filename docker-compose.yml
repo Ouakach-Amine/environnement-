@@ -18,13 +18,8 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
-
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   spark:
@@ -52,6 +47,8 @@ services:
     image: mongo:6
     ports:
       - "27018:27017"
+    volumes:
+      - mongo_data:/data/db   # ✔ stockage persistant
 
   backend:
     build: ./backend
@@ -73,3 +70,7 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+# ✅ IMPORTANT : en dehors de services
+volumes:
+  mongo_data:
