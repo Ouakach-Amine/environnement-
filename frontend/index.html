@@ -1,19 +1,41 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-  <title>Test</title>
+  <meta charset="UTF-8" />
+  <title>Game Analytics Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<script src="script.js"></script>
 
-<h1>ML Results</h1>
-<button onclick="loadML()">Load ML</button>
-<table id="ml" border="1"></table>
+  <h1>🎮 Game Analytics Dashboard</h1>
 
-<h1>Fuzzy Results</h1>
-<button onclick="loadFuzzy()">Load Fuzzy</button>
-<table id="fuzzy" border="1"></table>
+  <!-- METRICS -->
+  <section>
+    <h2>📊 Model Metrics</h2>
+    <button onclick="loadMetrics()">Load Metrics</button>
+    <div id="metrics-container"></div>
+  </section>
 
+  <!-- ML RESULTS -->
+  <section>
+    <h2>🤖 ML Classification (players_classified)</h2>
+    <button onclick="loadML()">Load ML Results</button>
+    <table id="ml">
+      <thead><tr><th>Player ID</th><th>Score</th><th>Level</th><th>Cluster</th><th>Model</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
 
+  <!-- FUZZY RESULTS -->
+  <section>
+    <h2>🔀 Fuzzy AHP Results</h2>
+    <button onclick="loadFuzzy()">Load Fuzzy Results</button>
+    <table id="fuzzy">
+      <thead><tr><th>Player ID</th><th>Fuzzy Score</th><th>Decision</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script src="script.js"></script>
 </body>
 </html>
