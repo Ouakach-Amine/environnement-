@@ -1,9 +1,17 @@
+from pymongo import MongoClient
 from flask import Flask, request, jsonify
 from kafka import KafkaProducer
 import json
 import time
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+# ✅ FIX CORS
+CORS(app)
+
+client = MongoClient("mongodb://mongodb:27017/")
+db = client["game_db"]
 
 # Connexion à Kafka (nom du service Docker)
 producer = None
@@ -48,6 +56,34 @@ def send_data():
     producer.flush()
 
     return jsonify({"status": "sent to Kafka", "data": data})
+
+
+# =========================
+# 🔷 NEW: ML RESULTS
+# =========================
+@app.route('/api/ml-results', methods=['GET'])
+def ml_results():
+    data = list(db.players_classified.find({}, {"_id": 0}))
+    return jsonify(data)
+
+
+# =========================
+# 🔷 NEW: FUZZY RESULTS
+# =========================
+@app.route('/api/fuzzy-results', methods=['GET'])
+def fuzzy_results():
+    data = list(db.fuzzy_results.find({}, {"_id": 0}))
+    return jsonify(data)
+
+
+# =========================
+# 🔷 NEW: METRICS
+# =========================
+@app.route('/api/metrics', methods=['GET'])
+def metrics():
+    data = db.model_metrics.find_one({}, {"_id": 0})
+    return jsonify(data)
+
 
 @app.route('/')
 def home():

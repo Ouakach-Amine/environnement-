@@ -1,9 +1,9 @@
-FROM node:18
+FROM python:3.10
 
 WORKDIR /app
 
 COPY . .
 
-RUN npm install
+EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["python", "-m", "http.server", "3000"]
