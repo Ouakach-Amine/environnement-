@@ -1,39 +1,160 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Game Analytics Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Serious Game Evaluator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <h1>🎮 Game Analytics Dashboard</h1>
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">◈</span>
+      <span>SeriousEval</span>
+    </div>
+    <div class="header-sub">Fuzzy-AHP · Multi-Dimensional Game Analysis</div>
+  </header>
 
-  <!-- METRICS -->
-  <section>
-    <h2>📊 Model Metrics</h2>
-    <button onclick="loadMetrics()">Load Metrics</button>
-    <div id="metrics-container"></div>
+  <!-- GAME EVALUATION CARD -->
+  <section class="section" id="section-eval">
+    <div class="section-title">
+      <span class="section-icon">⬡</span>
+      Overall Game Evaluation
+      <button class="btn" onclick="loadGameEval()">Refresh</button>
+    </div>
+
+    <div id="eval-loading" class="loading-msg">Click refresh to load evaluation…</div>
+
+    <div id="eval-card" class="eval-card hidden">
+
+      <div class="eval-top">
+        <div class="eval-rating" id="eval-rating">—</div>
+        <div class="eval-badges">
+          <span class="badge" id="badge-satisfied">—</span>
+          <span class="badge" id="badge-learning">—</span>
+        </div>
+        <p class="eval-summary" id="eval-summary"></p>
+      </div>
+
+      <div class="dim-grid">
+        <!-- PD -->
+        <div class="dim-card" data-dim="PD">
+          <div class="dim-header">
+            <span class="dim-icon">📚</span>
+            <span class="dim-name">Pedagogical</span>
+            <span class="dim-label" id="pd-label">—</span>
+          </div>
+          <div class="dim-bar-wrap">
+            <div class="dim-bar" id="pd-bar"></div>
+          </div>
+          <div class="dim-score" id="pd-score">—</div>
+          <p class="dim-rec" id="pd-rec"></p>
+        </div>
+
+        <!-- TD -->
+        <div class="dim-card" data-dim="TD">
+          <div class="dim-header">
+            <span class="dim-icon">⚙️</span>
+            <span class="dim-name">Technological</span>
+            <span class="dim-label" id="td-label">—</span>
+          </div>
+          <div class="dim-bar-wrap">
+            <div class="dim-bar" id="td-bar"></div>
+          </div>
+          <div class="dim-score" id="td-score">—</div>
+          <p class="dim-rec" id="td-rec"></p>
+        </div>
+
+        <!-- LD -->
+        <div class="dim-card" data-dim="LD">
+          <div class="dim-header">
+            <span class="dim-icon">🎮</span>
+            <span class="dim-name">Ludic</span>
+            <span class="dim-label" id="ld-label">—</span>
+          </div>
+          <div class="dim-bar-wrap">
+            <div class="dim-bar" id="ld-bar"></div>
+          </div>
+          <div class="dim-score" id="ld-score">—</div>
+          <p class="dim-rec" id="ld-rec"></p>
+        </div>
+
+        <!-- BD -->
+        <div class="dim-card" data-dim="BD">
+          <div class="dim-header">
+            <span class="dim-icon">🧠</span>
+            <span class="dim-name">Behavioural</span>
+            <span class="dim-label" id="bd-label">—</span>
+          </div>
+          <div class="dim-bar-wrap">
+            <div class="dim-bar" id="bd-bar"></div>
+          </div>
+          <div class="dim-score" id="bd-score">—</div>
+          <p class="dim-rec" id="bd-rec"></p>
+        </div>
+      </div>
+
+      <!-- Radar chart -->
+      <div class="radar-wrap">
+        <canvas id="radarChart" width="320" height="320"></canvas>
+      </div>
+
+    </div>
   </section>
 
-  <!-- ML RESULTS -->
-  <section>
-    <h2>🤖 ML Classification (players_classified)</h2>
-    <button onclick="loadML()">Load ML Results</button>
-    <table id="ml">
-      <thead><tr><th>Player ID</th><th>Score</th><th>Level</th><th>Cluster</th><th>Model</th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <!-- PLAYER FUZZY TABLE -->
+  <section class="section">
+    <div class="section-title">
+      <span class="section-icon">⬡</span>
+      Player Fuzzy-AHP Results
+      <button class="btn" onclick="loadFuzzy()">Refresh</button>
+    </div>
+    <div id="fuzzy-loading" class="loading-msg">Click refresh to load players…</div>
+    <div class="table-wrap hidden" id="fuzzy-table-wrap">
+      <table id="fuzzy-table">
+        <thead>
+          <tr>
+            <th>Player ID</th>
+            <th>PD <span class="th-sub">Pedagogy</span></th>
+            <th>TD <span class="th-sub">Technology</span></th>
+            <th>LD <span class="th-sub">Ludic</span></th>
+            <th>BD <span class="th-sub">Behaviour</span></th>
+            <th>Score</th>
+            <th>ML Level</th>
+          </tr>
+        </thead>
+        <tbody id="fuzzy-body"></tbody>
+      </table>
+    </div>
   </section>
 
-  <!-- FUZZY RESULTS -->
-  <section>
-    <h2>🔀 Fuzzy AHP Results</h2>
-    <button onclick="loadFuzzy()">Load Fuzzy Results</button>
-    <table id="fuzzy">
-      <thead><tr><th>Player ID</th><th>Fuzzy Score</th><th>Decision</th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <!-- ML CLUSTERING TABLE -->
+  <section class="section">
+    <div class="section-title">
+      <span class="section-icon">⬡</span>
+      ML Clustering Results
+      <button class="btn" onclick="loadML()">Refresh</button>
+    </div>
+    <div id="ml-loading" class="loading-msg">Click refresh to load ML results…</div>
+    <div class="table-wrap hidden" id="ml-table-wrap">
+      <table id="ml-table">
+        <thead>
+          <tr>
+            <th>Player ID</th>
+            <th>Level</th>
+            <th>Cluster</th>
+            <th>Model</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody id="ml-body"></tbody>
+      </table>
+    </div>
   </section>
 
   <script src="script.js"></script>
