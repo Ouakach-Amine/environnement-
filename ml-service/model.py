@@ -11,6 +11,7 @@ from pymongo import MongoClient
 from sklearn.cluster import AgglomerativeClustering, DBSCAN, KMeans
 from sklearn.metrics import davies_bouldin_score, silhouette_score
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer  # ← AJOUTÉ
 
 
 def get_db(retries=30, delay=5):
@@ -69,10 +70,26 @@ while True:
         feat = df.select_dtypes(include=["int64","float64","int32","float32"])
         feat = feat.dropna(axis=1, how="all")
         feat = feat.loc[:, feat.std() > 0]
+        
         if feat.shape[1] < 2:
             print("❌ Not enough features"); time.sleep(10); continue
 
-        X = StandardScaler().fit_transform(feat)
+        # ═══════════════════════════════════════════════════════
+        # 🔧 NOUVEAU : Gestion des NaN avant le clustering
+        # ═══════════════════════════════════════════════════════
+        if feat.isnull().any().any():
+            print(f"⚠️  NaN détectés dans {feat.isnull().sum().sum()} cellules — imputation par moyenne")
+            imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+            feat_imputed = pd.DataFrame(
+                imputer.fit_transform(feat),
+                columns=feat.columns,
+                index=feat.index
+            )
+        else:
+            feat_imputed = feat
+        # ═══════════════════════════════════════════════════════
+
+        X = StandardScaler().fit_transform(feat_imputed)  # ← MODIFIÉ (utilise feat_imputed)
         n = len(X); k = min(3, n - 1)
         if k < 2:
             print("❌ Not enough samples"); time.sleep(10); continue

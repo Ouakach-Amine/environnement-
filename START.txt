@@ -2,53 +2,58 @@
 # ════════════════════════════════════════════════════════
 # TERMINAL 0 — Démarrer les services Docker
 # ════════════════════════════════════════════════════════
-cd ~/Desktop/projet\ master/projet
+
 sudo docker-compose up -d
 
 
 # ════════════════════════════════════════════════════════
 # TERMINAL 1 — Backend Flask
 # ════════════════════════════════════════════════════════
-cd ~/Desktop/projet\ master/projet/backend
 
 
-# Lancer
+
+
+
+
+sudo fuser -k 5000/tcp
+
+
 python3 app.py
+
+
 # → Écoute sur http://localhost:5000
 
 # ════════════════════════════════════════════════════════
 # TERMINAL 2 — ML Service (model.py)
 # ════════════════════════════════════════════════════════
-cd ~/Desktop/projet\ master/projet/ml-service
 
 
-# Lancer
+
+
 python3 model.py
-# → Tourne en boucle toutes les 15s
-# → Écrit dans db.players_classified et db.model_metrics
 
 # ════════════════════════════════════════════════════════
 # TERMINAL 3 — Fuzzy AHP (fuzzy_ahp.py)
 # ════════════════════════════════════════════════════════
-cd ~/Desktop/projet\ master/projet/ml-service
 
-# Lancer en boucle automatique :
-while true; do python fuzzy_ahp.py; sleep 15; done
-# → Lit db.players + db.players_classified
-# → Écrit dans db.fuzzy_results et db.game_evaluation
+
+while true; do python3 fuzzy_ahp.py; sleep 15; done
+
 
 # ════════════════════════════════════════════════════════
 # TERMINAL 4 — Frontend
 # ════════════════════════════════════════════════════════
-cd ~/Desktop/projet\ master/projet/frontend
 
-python -m http.server 3000
+
+python3 -m http.server 3000
+
+
 # → Ouvrir http://localhost:3000
 
 # ════════════════════════════════════════════════════════
-# VÉRIFICATION MongoDB (optionnel)
+# VÉRIFICATION MongoDB 
 # ════════════════════════════════════════════════════════
-# Se connecter au shell MongoDB :
+
 mongosh mongodb://localhost:27017/game_db
 
 # Dans mongosh :
@@ -58,9 +63,3 @@ db.model_metrics.findOne()
 db.fuzzy_results.countDocuments()
 db.game_evaluation.findOne()
 
-# ════════════════════════════════════════════════════════
-# ARRÊT
-# ════════════════════════════════════════════════════════
-# Stopper les terminaux : Ctrl+C dans chaque terminal
-# Stopper Docker :
-sudo docker-compose down
