@@ -4,6 +4,7 @@ services:
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
@@ -11,24 +12,26 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
-      - "9093:9092"
+      - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # ← localhost car les apps tournent sur la machine hôte
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   mongodb:
     image: mongo:6
+    container_name: mongodb
     ports:
-      - "27018:27017"
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
-    # ── Healthcheck: ml-service won't start until MongoDB is ready ──
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -56,31 +59,6 @@ services:
       --conf spark.executor.extraJavaOptions=-Divy.home=/tmp/.ivy2
       /app/streaming.py
       "
-
-  backend:
-    build: ./backend
-    ports:
-      - "5000:5000"
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-
-  ml-service:
-    build: ./ml-service
-    depends_on:
-      mongodb:
-        condition: service_healthy   # wait for MongoDB healthcheck ✅
-      kafka:
-        condition: service_started
-    # Always restart on crash so Exit 1 doesn't kill it permanently
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
 
 volumes:
   mongo_data:

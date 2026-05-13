@@ -1,27 +1,27 @@
 from pymongo import MongoClient
 from flask import Flask, request, jsonify
 from kafka import KafkaProducer
-import json
-import time
 from flask_cors import CORS
+import json, time
 
 app = Flask(__name__)
 CORS(app)
 
-client = MongoClient("mongodb://mongodb:27017/")
+# ── MongoDB on localhost (Docker port 27017 mapped to host) ───────
+client = MongoClient("mongodb://localhost:27017/")
 db = client["game_db"]
 
+# ── Kafka on localhost ────────────────────────────────────────────
 producer = None
-
 while producer is None:
     try:
         producer = KafkaProducer(
-            bootstrap_servers='kafka:9092',
+            bootstrap_servers='localhost:9092',
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
         )
-        print("✅ Connected to Kafka")
-    except:
-        print("⏳ Kafka not ready, retrying...")
+        print("✅ Kafka connected")
+    except Exception as e:
+        print(f"⏳ Kafka not ready: {e}")
         time.sleep(5)
 
 
@@ -41,48 +41,36 @@ def send_data():
         "repetition"   : req.get("repetition", 0),
         "timestamp"    : time.time()
     }
-
-    if data["player_id"] is None or data["score"] is None or data["time"] is None:
+    if data["player_id"] is None or data["score"] is None:
         return jsonify({"error": "Missing required fields"}), 400
 
     producer.send('game_topic', data)
     producer.flush()
-    return jsonify({"status": "sent to Kafka", "data": data})
+    return jsonify({"status": "sent", "data": data})
 
 
 @app.route('/api/ml-results', methods=['GET'])
 def ml_results():
-    data = list(db.players_classified.find({}, {"_id": 0}))
-    return jsonify(data)
-
+    return jsonify(list(db.players_classified.find({}, {"_id": 0})))
 
 @app.route('/api/fuzzy-results', methods=['GET'])
 def fuzzy_results():
-    data = list(db.fuzzy_results.find({}, {"_id": 0}))
-    return jsonify(data)
-
+    return jsonify(list(db.fuzzy_results.find({}, {"_id": 0})))
 
 @app.route('/api/metrics', methods=['GET'])
 def metrics():
-    data = db.model_metrics.find_one({}, {"_id": 0})
-    return jsonify(data)
+    return jsonify(db.model_metrics.find_one({}, {"_id": 0}))
 
-
-# ─────────────────────────────────────────────
-# Game-level evaluation (aggregated Fuzzy-AHP)
-# ─────────────────────────────────────────────
 @app.route('/api/game-evaluation', methods=['GET'])
 def game_evaluation():
     data = db.game_evaluation.find_one({}, {"_id": 0})
-    if data is None:
-        return jsonify({"error": "No evaluation available yet"}), 404
+    if not data:
+        return jsonify({"error": "No evaluation yet"}), 404
     return jsonify(data)
-
 
 @app.route('/')
 def home():
-    return "Backend running"
-
+    return "Backend running on localhost:5000"
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
