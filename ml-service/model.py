@@ -18,7 +18,7 @@ db = client["game_db"]
 # Charger modèle
 # ==========================================================
 
-PKL_PATH = "player_classification_gmm_3.pkl"
+PKL_PATH = "/home/amin-oukhouya/player_classification_gmm_4.pkl"
 
 print(f"📦 Chargement : {PKL_PATH}")
 
