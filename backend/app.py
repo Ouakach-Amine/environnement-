@@ -1,206 +1,168 @@
 """
-Backend Flask — Mode temps réel
-- Écrit directement dans MongoDB (sans attendre Spark)
-- Lance ML + Fuzzy AHP en background immédiatement après chaque joueur
+Backend Flask — Temps réel
+Collecte toutes les données, écrit dans MongoDB,
+déclenche ML (pkl) + Fuzzy AHP en background thread.
 """
-import threading
-import time
-import subprocess
-import sys
-import os
-import math
-import json
-
+import os, sys, time, threading, subprocess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
 
-app = Flask(__name__)
+app  = Flask(__name__)
 CORS(app)
 
-# ── MongoDB direct ────────────────────────────────────────────────
+# ── MongoDB ───────────────────────────────────────────────────────
 client = MongoClient("mongodb://localhost:27017/")
 db     = client["game_db"]
 
-# ── Chemin vers les scripts ML (même dossier ou ../ml-service) ───
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-ML_DIR    = os.path.join(BASE_DIR, "..", "ml-service")
-MODEL_PY  = os.path.join(ML_DIR, "model_once.py")
-FUZZY_PY  = os.path.join(ML_DIR, "fuzzy_ahp.py")
-PYTHON    = sys.executable   # utilise le même Python que le backend
+# ── Chemins vers les scripts ML ───────────────────────────────────
+BASE   = os.path.dirname(os.path.abspath(__file__))
+ML_DIR = os.path.join(BASE, "..", "ml-service")
+PYTHON = sys.executable
+_lock  = threading.Lock()
 
-# ── Lock pour éviter deux exécutions ML simultanées ──────────────
-_ml_lock = threading.Lock()
-
-# ═══════════════════════════════════════════════════════════════════
-# 🔧 Fonction anti-NaN (AJOUTÉE)
-# ═══════════════════════════════════════════════════════════════════
-def clean_nan(obj):
-    """
-    Remplace récursivement NaN, Infinity et -Infinity par None
-    pour garantir un JSON valide.
-    """
-    if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return None  # ou 0.0 si vous préférez
-        return obj
-    elif isinstance(obj, dict):
-        return {k: clean_nan(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_nan(v) for v in obj]
-    elif isinstance(obj, tuple):
-        return tuple(clean_nan(v) for v in obj)
-    else:
-        return obj
-
-
-def run_ml_pipeline():
-    """
-    Lance model_once.py puis fuzzy_ahp.py en séquence.
-    Appelé dans un thread séparé pour ne pas bloquer le backend.
-    """
-    if not _ml_lock.acquire(blocking=False):
-        print("⏳ ML pipeline déjà en cours, skip")
-        return
+def run_pipeline():
+    """Lance model_once.py puis fuzzy_ahp.py après chaque nouveau joueur."""
+    if not _lock.acquire(blocking=False):
+        return                          # déjà en cours, on skip
     try:
-        print("🔄 ML pipeline démarré...")
-
-        # Attendre qu'il y ait au moins 3 joueurs
-        count = db.players.count_documents({})
-        if count < 3:
-            print(f"⏳ Seulement {count} joueur(s) — ML skip (min 3)")
+        n = db.players.count_documents({})
+        if n < 3:
+            print(f"⏳ {n} joueur(s) — min 3 requis pour ML")
             return
 
-        # 1. Clustering ML
-        r1 = subprocess.run(
-            [PYTHON, MODEL_PY],
-            capture_output=True, text=True, timeout=60
-        )
-        if r1.stdout: print("[model_once]", r1.stdout.strip())
-        if r1.stderr: print("[model_once ERR]", r1.stderr.strip())
+        for script in ["model_once.py", "fuzzy_ahp.py"]:
+            path = os.path.join(ML_DIR, script)
+            r = subprocess.run(
+                [PYTHON, path],
+                capture_output=True, text=True, timeout=90
+            )
+            out = r.stdout.strip()
+            err = r.stderr.strip()
+            if out: print(f"[{script}]", out)
+            if err: print(f"[{script} ERR]", err)
 
-        # 2. Fuzzy AHP
-        r2 = subprocess.run(
-            [PYTHON, FUZZY_PY],
-            capture_output=True, text=True, timeout=60
-        )
-        if r2.stdout: print("[fuzzy_ahp]", r2.stdout.strip())
-        if r2.stderr: print("[fuzzy_ahp ERR]", r2.stderr.strip())
-
-        print("✅ ML pipeline terminé")
-
-    except subprocess.TimeoutExpired:
-        print("❌ ML pipeline timeout")
+        print("✅ Pipeline ML + Fuzzy AHP terminé")
     except Exception as e:
-        print(f"❌ ML pipeline erreur: {e}")
+        print(f"❌ Pipeline erreur: {e}")
     finally:
-        _ml_lock.release()
+        _lock.release()
 
 
 # ═══════════════════════════════════════════════════════════════════
-# ROUTES
+# ENDPOINT COLLECTE — toutes les données du joueur
 # ═══════════════════════════════════════════════════════════════════
-
 @app.route('/send', methods=['POST'])
 def send_data():
-    req = request.json
-    if not req:
-        return jsonify({"error": "No JSON body"}), 400
+    req = request.json or {}
 
-    # Validation des champs obligatoires
-    if req.get("player_id") is None or req.get("score") is None:
-        return jsonify({"error": "player_id and score are required"}), 400
+    if req.get("player_id") is None:
+        return jsonify({"error": "player_id requis"}), 400
 
+    # ── Anciennes données (pipeline Kafka/Spark déjà existant) ────
     data = {
-        "player_id"    : req.get("player_id"),
-        "score"        : req.get("score"),
-        "time"         : req.get("time", 0),
-        "clicks"       : req.get("clicks", 0),
-        "moves"        : req.get("moves", 0),
-        "errors"       : req.get("errors", 0),
-        "response_time": req.get("response_time", 0.0),
-        "level"        : req.get("level", 1),
-        "success"      : req.get("success", 0),
-        "repetition"   : req.get("repetition", 0),
-        "timestamp"    : time.time()
+        "player_id"     : req["player_id"],
+        "score"         : req.get("score", 0),
+        "time"          : req.get("time", 0),
+        "clicks"        : req.get("clicks", 0),
+        "moves"         : req.get("moves", 0),
+        "errors"        : req.get("errors", 0),
+        "response_time" : req.get("response_time", 0.0),
+        "level"         : req.get("level", 1),
+        "success"       : req.get("success", 0),
+        "repetition"    : req.get("repetition", 0),
+
+        # ── Nouvelles données — Pedagogical Dimension ──────────────
+        "hints_used"           : req.get("hints_used", 0),
+        "correct_answers"      : req.get("correct_answers", 0),
+        "wrong_answers"        : req.get("wrong_answers", 0),
+        "objectives_completed" : req.get("objectives_completed", 0),
+        "knowledge_score"      : req.get("knowledge_score", 0.0),
+        "progression_rate"     : req.get("progression_rate", 0.0),
+        "retry_after_fail"     : req.get("retry_after_fail", 0),
+
+        # ── Nouvelles données — Technological Dimension ────────────
+        "load_time"     : req.get("load_time", 0.0),
+        "crash_count"   : req.get("crash_count", 0),
+        "lag_events"    : req.get("lag_events", 0),
+        "frame_drops"   : req.get("frame_drops", 0),
+        "api_errors"    : req.get("api_errors", 0),
+        "screen_width"  : req.get("screen_width", 1920),
+        "screen_height" : req.get("screen_height", 1080),
+        "device_type"   : req.get("device_type", "desktop"),  # desktop/mobile/tablet
+
+        # ── Nouvelles données — Ludic Dimension ────────────────────
+        "playtime_voluntary"   : req.get("playtime_voluntary", 0),
+        "bonus_collected"      : req.get("bonus_collected", 0),
+        "challenges_attempted" : req.get("challenges_attempted", 0),
+        "idle_time"            : req.get("idle_time", 0.0),
+        "exploration_rate"     : req.get("exploration_rate", 0.0),
+        "combo_count"          : req.get("combo_count", 0),
+        "skip_count"           : req.get("skip_count", 0),
+
+        # ── Nouvelles données — Behavioural Dimension ──────────────
+        "help_requests"      : req.get("help_requests", 0),
+        "give_up_count"      : req.get("give_up_count", 0),
+        "pause_count"        : req.get("pause_count", 0),
+        "total_pause_time"   : req.get("total_pause_time", 0.0),
+        "focus_time"         : req.get("focus_time", 0.0),
+        "frustration_events" : req.get("frustration_events", 0),
+        "session_count"      : req.get("session_count", 1),
+        "days_active"        : req.get("days_active", 1),
+
+        "timestamp": time.time()
     }
 
-    # ── Écriture directe dans MongoDB ────────────────────────────
-    # Upsert : si le joueur existe déjà, on met à jour
+    # ── Écriture directe MongoDB (upsert) ─────────────────────────
     db.players.update_one(
         {"player_id": data["player_id"]},
         {"$set": data},
         upsert=True
     )
-    print(f"✅ Joueur #{data['player_id']} sauvegardé dans MongoDB")
+    print(f"✅ Joueur #{data['player_id']} sauvegardé")
 
-    # ── Lancer ML + Fuzzy AHP en arrière-plan ────────────────────
-    t = threading.Thread(target=run_ml_pipeline, daemon=True)
-    t.start()
+    # ── Déclencher ML en background ───────────────────────────────
+    threading.Thread(target=run_pipeline, daemon=True).start()
 
-    # Nettoie les NaN avant d'envoyer la réponse (AJOUTÉ)
-    return jsonify(clean_nan({"status": "saved", "data": data}))
+    return jsonify({"status": "saved", "player_id": data["player_id"]})
 
 
-@app.route('/api/players', methods=['GET'])
+# ── API endpoints ─────────────────────────────────────────────────
+@app.route('/api/players',          methods=['GET'])
 def get_players():
-    data = list(db.players.find({}, {"_id": 0}).sort("timestamp", -1))
-    return jsonify(clean_nan(data))  # MODIFIÉ
+    return jsonify(list(db.players.find({}, {"_id": 0}).sort("timestamp", -1)))
 
-
-@app.route('/api/ml-results', methods=['GET'])
+@app.route('/api/ml-results',       methods=['GET'])
 def ml_results():
-    data = list(db.players_classified.find({}, {"_id": 0}))
-    return jsonify(clean_nan(data))  # MODIFIÉ
+    return jsonify(list(db.players_classified.find({}, {"_id": 0})))
 
-
-@app.route('/api/fuzzy-results', methods=['GET'])
+@app.route('/api/fuzzy-results',    methods=['GET'])
 def fuzzy_results():
-    data = list(db.fuzzy_results.find({}, {"_id": 0}))
-    return jsonify(clean_nan(data))  # MODIFIÉ
+    return jsonify(list(db.fuzzy_results.find({}, {"_id": 0})))
 
-
-@app.route('/api/metrics', methods=['GET'])
+@app.route('/api/metrics',          methods=['GET'])
 def metrics():
-    data = db.model_metrics.find_one({}, {"_id": 0})
-    return jsonify(clean_nan(data or {}))  # MODIFIÉ
+    return jsonify(db.model_metrics.find_one({}, {"_id": 0}) or {})
 
-
-@app.route('/api/game-evaluation', methods=['GET'])
+@app.route('/api/game-evaluation',  methods=['GET'])
 def game_evaluation():
-    data = db.game_evaluation.find_one({}, {"_id": 0})
-    if not data:
-        return jsonify({"error": "No evaluation yet"}), 404
-    return jsonify(clean_nan(data))  # MODIFIÉ
+    d = db.game_evaluation.find_one({}, {"_id": 0})
+    return jsonify(d) if d else (jsonify({"error": "Pas encore d'évaluation"}), 404)
 
-
-@app.route('/api/status', methods=['GET'])
+@app.route('/api/status',           methods=['GET'])
 def status():
-    """Endpoint de statut : le front le poll pour savoir quand rafraîchir."""
-    return jsonify(clean_nan({  # MODIFIÉ
-        "players"         : db.players.count_documents({}),
-        "classified"      : db.players_classified.count_documents({}),
-        "fuzzy_results"   : db.fuzzy_results.count_documents({}),
-        "has_evaluation"  : db.game_evaluation.count_documents({}) > 0,
-        "timestamp"       : time.time()
-    }))
-
+    return jsonify({
+        "players"       : db.players.count_documents({}),
+        "classified"    : db.players_classified.count_documents({}),
+        "fuzzy_results" : db.fuzzy_results.count_documents({}),
+        "has_evaluation": db.game_evaluation.count_documents({}) > 0,
+        "timestamp"     : time.time()
+    })
 
 @app.route('/')
 def home():
     return jsonify({"status": "running", "port": 5000})
 
-
 if __name__ == '__main__':
-    # Essayer plusieurs ports si le 5000 est occupé
-    ports = [5000, 5001, 5002, 5003]
-    for port in ports:
-        try:
-            print(f"🚀 Tentative de démarrage sur le port {port}...")
-            app.run(host='0.0.0.0', port=port, debug=False)
-            break
-        except OSError as e:
-            if "Address already in use" in str(e):
-                print(f"⚠️ Port {port} occupé, essai du suivant...")
-                continue
-            raise
+    print("🚀 Backend démarré sur http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False)

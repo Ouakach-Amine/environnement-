@@ -63,3 +63,7 @@ db.model_metrics.findOne()
 db.fuzzy_results.countDocuments()
 db.game_evaluation.findOne()
 
+
+
+
+curl -X POST http://localhost:5000/send -H "Content-Type: application/json" -d '{"player_id":4000,"score":78,"time":35,"clicks":42,"moves":58,"errors":3,"response_time":0.8,"level":3,"success":1,"repetition":2,"hints_used":2,"correct_answers":15,"wrong_answers":3,"objectives_completed":4,"knowledge_score":72.5,"progression_rate":0.75,"retry_after_fail":1,"load_time":1.2,"crash_count":0,"lag_events":1,"frame_drops":2,"api_errors":0,"screen_width":1920,"screen_height":1080,"device_type":"desktop","playtime_voluntary":25,"bonus_collected":3,"challenges_attempted":2,"idle_time":8.5,"exploration_rate":0.65,"combo_count":4,"skip_count":1,"help_requests":1,"give_up_count":0,"pause_count":2,"total_pause_time":45.0,"focus_time":280.0,"frustration_events":1,"session_count":3,"days_active":2}'

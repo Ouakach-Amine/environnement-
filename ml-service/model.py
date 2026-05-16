@@ -1,156 +1,205 @@
-"""
-ML Service — runs directly on the host machine (no Docker)
-Connects to MongoDB localhost:27017
-"""
-import time, traceback
-from collections import Counter
-
+import os
+import time
+import joblib
 import numpy as np
 import pandas as pd
+
 from pymongo import MongoClient
-from sklearn.cluster import AgglomerativeClustering, DBSCAN, KMeans
-from sklearn.metrics import davies_bouldin_score, silhouette_score
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer  # ← AJOUTÉ
+from collections import Counter
 
+# ==========================================================
+# MongoDB
+# ==========================================================
 
-def get_db(retries=30, delay=5):
-    for i in range(1, retries + 1):
+client = MongoClient("mongodb://localhost:27017/")
+db = client["game_db"]
+
+# ==========================================================
+# Charger modèle
+# ==========================================================
+
+PKL_PATH = "player_classification_gmm_3.pkl"
+
+print(f"📦 Chargement : {PKL_PATH}")
+
+model_data = joblib.load(PKL_PATH)
+
+FEATURES = model_data["features"]
+NUMERIC_FEATURES = model_data["numeric_features"]
+DEVICE_COLUMNS = model_data["device_columns"]
+
+imputer = model_data["imputer"]
+scaler = model_data["scaler"]
+gmm = model_data["gmm"]
+
+cluster_mapping = model_data["cluster_mapping"]
+
+sil_training = model_data["silhouette_score"]
+
+print("✅ Modèle chargé")
+print("Features:", len(FEATURES))
+print("Clusters:", gmm.n_components)
+print("Mapping:", cluster_mapping)
+print("Silhouette:", round(sil_training, 4))
+
+# ==========================================================
+# Préparation vecteur
+# ==========================================================
+
+def prepare_dataframe(player):
+
+    data = {}
+
+    # features numériques
+    for f in NUMERIC_FEATURES:
+
+        val = player.get(f, 0)
+
         try:
-            client = MongoClient("mongodb://localhost:27017/",
-                                 serverSelectionTimeoutMS=3000)
-            client.server_info()
-            print(f"✅ MongoDB connected (attempt {i})")
-            return client["game_db"]
-        except Exception as e:
-            print(f"⏳ [{i}/{retries}] {e}")
-            time.sleep(delay)
-    raise RuntimeError("Cannot connect to MongoDB")
+            data[f] = float(val)
+        except:
+            data[f] = 0.0
 
-db = get_db()
+    # device_type
+    device = str(
+        player.get("device_type", "desktop")
+    ).lower()
 
+    for col in DEVICE_COLUMNS:
 
-def safe_metrics(X, labels):
-    mask = labels != -1
-    Xf, yf = X[mask], labels[mask]
-    if len(set(yf)) < 2 or len(Xf) < 2:
-        return -1.0, float("inf")
-    try:
-        return float(silhouette_score(Xf, yf)), float(davies_bouldin_score(Xf, yf))
-    except:
-        return -1.0, float("inf")
-
-
-def map_level(labels, scores):
-    df_tmp = pd.DataFrame({"cluster": labels, "score": scores})
-    means  = (df_tmp.groupby("cluster")["score"]
-              .mean().drop(index=-1, errors="ignore").sort_values())
-    valid  = list(means.index)
-    mapping = {-1: "intermediate"}
-    for i, c in enumerate(valid):
-        if len(valid) == 1:        mapping[c] = "intermediate"
-        elif i == 0:               mapping[c] = "beginner"
-        elif i == len(valid) - 1:  mapping[c] = "expert"
-        else:                      mapping[c] = "intermediate"
-    return [mapping.get(int(l), "intermediate") for l in labels]
-
-
-print("🚀 ML Service started (localhost mode)")
-
-while True:
-    try:
-        print("\n" + "─" * 50)
-        raw = list(db.players.find({}, {"_id": 0}))
-        print(f"   players: {len(raw)}")
-
-        if len(raw) < 5:
-            print("⏳ Need ≥5 players"); time.sleep(10); continue
-
-        df   = pd.DataFrame(raw)
-        feat = df.select_dtypes(include=["int64","float64","int32","float32"])
-        feat = feat.dropna(axis=1, how="all")
-        feat = feat.loc[:, feat.std() > 0]
-        
-        if feat.shape[1] < 2:
-            print("❌ Not enough features"); time.sleep(10); continue
-
-        # ═══════════════════════════════════════════════════════
-        # 🔧 NOUVEAU : Gestion des NaN avant le clustering
-        # ═══════════════════════════════════════════════════════
-        if feat.isnull().any().any():
-            print(f"⚠️  NaN détectés dans {feat.isnull().sum().sum()} cellules — imputation par moyenne")
-            imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
-            feat_imputed = pd.DataFrame(
-                imputer.fit_transform(feat),
-                columns=feat.columns,
-                index=feat.index
-            )
+        if col == f"device_type_{device}":
+            data[col] = 1
         else:
-            feat_imputed = feat
-        # ═══════════════════════════════════════════════════════
+            data[col] = 0
 
-        X = StandardScaler().fit_transform(feat_imputed)  # ← MODIFIÉ (utilise feat_imputed)
-        n = len(X); k = min(3, n - 1)
-        if k < 2:
-            print("❌ Not enough samples"); time.sleep(10); continue
+    return pd.DataFrame([data])
 
-        km_l = KMeans(n_clusters=k, random_state=42, n_init=10).fit_predict(X)
-        db_l = DBSCAN(eps=1.5, min_samples=3).fit_predict(X)
-        ag_l = AgglomerativeClustering(n_clusters=k).fit_predict(X)
+# ==========================================================
+# Prediction
+# ==========================================================
 
-        label_map = {"kmeans": km_l, "dbscan": db_l, "agglo": ag_l}
-        m = {}
-        for name, lbls in label_map.items():
-            sil, dbi = safe_metrics(X, lbls)
-            m[name]  = {"sil": sil, "dbi": dbi}
-            dbi_str  = "∞" if dbi == float("inf") else f"{dbi:.4f}"
-            print(f"   {name:<12} Sil={sil:+.4f}  DBI={dbi_str}")
+def predict_player(player):
 
-        finite  = [v["dbi"] for v in m.values() if v["dbi"] != float("inf")]
-        max_dbi = max(finite) if finite else 1.0
+    df = prepare_dataframe(player)
 
-        def composite(info):
-            s, d = info["sil"], info["dbi"]
-            return -999.0 if (s == -1 or d == float("inf")) else s + (1 - d / max_dbi)
+    # ordre exact
+    df = df.reindex(columns=FEATURES, fill_value=0)
 
-        best         = max(m, key=lambda nm: composite(m[nm]))
-        final_labels = label_map[best]
-        score_vals   = df["score"].values if "score" in df.columns else np.zeros(n)
-        levels       = map_level(final_labels, score_vals)
+    # NaN handling
+    X_imputed = imputer.transform(df)
 
-        print(f"   🏆 {best.upper()}  dist={dict(Counter(levels))}")
+    # scaling
+    X_scaled = scaler.transform(X_imputed)
 
-        classified = []
-        for i, row in df.iterrows():
-            doc = row.to_dict()
-            doc["cluster"] = int(final_labels[i])
-            doc["level"]   = levels[i]
-            doc["model"]   = best
-            classified.append(doc)
+    # cluster
+    cluster = gmm.predict(X_scaled)[0]
 
-        db.players_classified.delete_many({})
-        db.players_classified.insert_many(classified)
+    # probabilités
+    probs = gmm.predict_proba(X_scaled)[0]
 
-        def to_val(d): return round(d, 4) if d != float("inf") else -1.0
+    confidence = round(float(np.max(probs)), 4)
 
-        db.model_metrics.delete_many({})
-        db.model_metrics.insert_one({
-            "sil_kmeans" : round(m["kmeans"]["sil"], 4),
-            "sil_dbscan" : round(m["dbscan"]["sil"], 4),
-            "sil_agglo"  : round(m["agglo"]["sil"],  4),
-            "dbi_kmeans" : to_val(m["kmeans"]["dbi"]),
-            "dbi_dbscan" : to_val(m["dbscan"]["dbi"]),
-            "dbi_agglo"  : to_val(m["agglo"]["dbi"]),
-            "comp_kmeans": round(composite(m["kmeans"]), 4),
-            "comp_dbscan": round(composite(m["dbscan"]), 4),
-            "comp_agglo" : round(composite(m["agglo"]),  4),
-            "best_model" : best,
-            "n_players"  : len(classified),
-            "timestamp"  : time.time(),
-        })
-        print(f"✅ Saved {len(classified)} classified + metrics")
+    level = cluster_mapping.get(
+        str(cluster),
+        "Intermediate"
+    )
 
-    except Exception:
-        print("❌ Error:"); traceback.print_exc()
+    return {
+        **player,
+        "cluster": int(cluster),
+        "level": level,
+        "confidence": confidence,
+        "model": "GaussianMixture"
+    }
 
-    time.sleep(15)
+# ==========================================================
+# Pipeline
+# ==========================================================
+
+print("\n🔄 Classification des joueurs...")
+
+raw_players = list(
+    db.players.find({}, {"_id": 0})
+)
+
+print(f"   {len(raw_players)} joueurs trouvés")
+
+if len(raw_players) == 0:
+    print("Aucun joueur")
+    exit()
+
+classified = []
+
+errors = 0
+
+for player in raw_players:
+
+    try:
+
+        result = predict_player(player)
+
+        classified.append(result)
+
+    except Exception as e:
+
+        print(
+            f"⚠ Joueur #{player.get('player_id')}: {e}"
+        )
+
+        errors += 1
+
+# ==========================================================
+# Distribution
+# ==========================================================
+
+dist = Counter(
+    p["level"] for p in classified
+)
+
+print("\nDistribution:")
+print(dict(dist))
+
+# ==========================================================
+# Sauvegarde MongoDB
+# ==========================================================
+
+db.players_classified.delete_many({})
+
+if classified:
+    db.players_classified.insert_many(classified)
+
+print(
+    f"\n✅ players_classified → {len(classified)} docs"
+)
+
+# ==========================================================
+# Métriques
+# ==========================================================
+
+db.model_metrics.delete_many({})
+
+db.model_metrics.insert_one({
+
+    "model": "GaussianMixture",
+
+    "n_clusters": int(gmm.n_components),
+
+    "features": len(FEATURES),
+
+    "cluster_mapping": {
+        str(k): str(v)
+        for k, v in cluster_mapping.items()
+    },
+
+    "silhouette_score": float(sil_training),
+
+    "distribution": dict(dist),
+
+    "players": len(classified),
+
+    "errors": errors,
+
+    "timestamp": time.time()
+})
+
+print("✅ model_metrics sauvegardé")
