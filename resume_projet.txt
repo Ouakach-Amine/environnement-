@@ -1,0 +1,56 @@
+Résumé du projet
+=================
+
+Ce projet implémente une plateforme d'analyse de joueurs pour un serious game, avec une architecture multi-service basée sur Docker, un backend Flask, un service d'apprentissage automatique et une évaluation floue AHP.
+
+Architecture principale
+----------------------
+- `docker-compose.yml` démarre les services Docker suivants :
+  - `zookeeper` (Kafka)
+  - `kafka`
+  - `mongodb`
+  - `spark`    
+- `spark/streaming.py` consomme le flux Kafka `game_topic`, parse les messages JSON et écrit les données des joueurs dans MongoDB.
+
+Backend
+-------
+- `backend/app.py` est une API Flask qui reçoit les données de joueur via POST sur `/send`.
+- Les données sont stockées dans MongoDB (`game_db.players`).
+- Après chaque enregistrement, un thread de fond déclenche un pipeline ML puis une évaluation floue.
+- Le backend expose également des endpoints de consultation :
+  - `/api/players`
+  - `/api/ml-results`
+  - `/api/fuzzy-results`
+  - `/api/metrics`
+  - `/api/game-evaluation`
+  - `/api/status`
+
+Service ML et évaluation
+------------------------
+- Le dossier `ml-service/` contient les scripts de classification et d'analyse.
+- `ml-service/model.py` charge un modèle de classification sauvegardé (`player_classification_gmm_*.pkl`), prépare les données de chaque joueur, effectue la prédiction de cluster, et génère des métriques et une distribution.
+- `ml-service/fuzzy_ahp.py` réalise une évaluation de type Fuzzy AHP sur les joueurs en utilisant plusieurs dimensions : pédagogique, technologique, ludique et comportementale.
+- Cette évaluation calcule des scores fuzzy pour chaque dimension, des labels de performance, des profils par niveau de joueur (Beginner / Intermediate / Expert), puis enregistre les résultats dans MongoDB (`game_evaluation` et `fuzzy_results`).
+
+Frontend
+--------
+- Le dossier `frontend/` contient l’interface utilisateur.
+- Le frontend est démarré avec `npm install` puis `npm start` (ou via `python3 -m http.server 3000` dans START.txt).
+
+Fichiers de support
+-------------------
+- `SETUP_GUIDE.md` contient les instructions de démarrage multi-environnement et les réglages de connexion pour MongoDB, Kafka et Zookeeper.
+- `START.txt` décrit étape par étape les terminaux à lancer : Docker, backend, ML service, Fuzzy AHP, frontend.
+
+Flux de données
+---------------
+1. Les données clients sont envoyées au backend via `/send`.
+2. Le backend stocke le joueur dans MongoDB et déclenche un pipeline ML.
+3. Le pipeline de classification segmente les joueurs en clusters et stocke les résultats.
+4. La phase Fuzzy AHP produit une évaluation globale du serious game et des scores par joueur.
+5. Spark peut ingérer un flux Kafka et écrire directement dans MongoDB.
+
+Objectif global
+---------------
+- Fournir un système complet de collecte et d’analyse de données de jeu.
+- Combiner classification machine learning et évaluation multicritère floue pour mesurer l’expérience et l’efficacité pédagogique d’un jeu.

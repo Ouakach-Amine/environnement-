@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Serious Game Evaluator</title>
+  <title>Serious Game Evaluator — ASF</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
@@ -15,25 +15,22 @@
 <header>
   <div class="logo"><span class="logo-icon">◈</span> SeriousEval</div>
   <div class="header-right">
-    <span class="header-sub">Fuzzy-AHP · ML · PPIF</span>
+    <span class="header-sub">Fuzzy-AHP · GMM · ASF</span>
     <button class="btn btn-sm" onclick="toggleAutoRefresh()" id="auto-badge">Auto-refresh ON</button>
   </div>
 </header>
 
-<!-- ML METRICS -->
-<section class="section">
-  <div class="section-title">
-    <span class="section-icon">⬡</span> ML Clustering Metrics
-    <button class="btn" onclick="loadMetrics()">Refresh</button>
-  </div>
-  <div id="metrics-loading" class="loading-msg">Loading metrics…</div>
-  <div id="metrics-card" class="hidden"></div>
-</section>
+<!-- ASF BANNER (injecté par JS) -->
+<div class="section" style="margin-top:20px;">
+  <div id="asf-banner"></div>
+</div>
+
+
 
 <!-- GAME EVALUATION -->
 <section class="section" id="section-eval">
   <div class="section-title">
-    <span class="section-icon">⬡</span> Overall Game Evaluation
+    <span class="section-icon">⬡</span> Overall Game Evaluation — ASF
     <button class="btn" onclick="loadGameEval()">Refresh</button>
   </div>
   <div id="eval-loading" class="loading-msg">Loading evaluation…</div>
@@ -44,11 +41,12 @@
       <div class="eval-badges">
         <span class="badge" id="badge-satisfied">—</span>
         <span class="badge" id="badge-learning">—</span>
+        <span class="badge" id="badge-method">—</span>
       </div>
       <p class="eval-summary" id="eval-summary"></p>
     </div>
 
-    <!-- 4 dimension cards -->
+    <!-- 4 dimension cards — scores Φ_D (bruts, sans PPIF) -->
     <div class="dim-grid">
       <div class="dim-card" data-dim="PD">
         <div class="dim-header">
@@ -100,35 +98,44 @@
       <div class="radar-wrap">
         <canvas id="radarChart" width="300" height="300"></canvas>
       </div>
-      <!-- Per player-type -->
-      <div>
-        <div class="pt-title">Analysis by Player Profile</div>
+
+      <!-- ASF Group Stats : Γ*_L et Φ̄_L_D par profil GMM -->
+      <div style="flex:1;">
+        <div class="pt-title">
+          ASF Group Statistics
+          <span class="pt-subtitle">
+            Γ*<sub>L</sub> = (1/|G<sub>L</sub>|) Σ Γ(x<sub>p</sub>)
+          </span>
+        </div>
         <div class="player-type-grid" id="player-type-grid"></div>
+        <!-- Note méthode d'intégration -->
+        <div id="asf-integration-note" class="hidden" style="margin-top:14px;"></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- FUZZY RESULTS TABLE -->
+<!-- FUZZY RESULTS TABLE — ASF -->
 <section class="section">
   <div class="section-title">
     <span class="section-icon">⬡</span>
-    Player Fuzzy-AHP Results
+    Player ASF Evaluation Results
     <span class="count-badge" id="fuzzy-count"></span>
     <button class="btn" onclick="loadFuzzy()">Refresh</button>
   </div>
-  <div id="fuzzy-loading" class="loading-msg">Loading player evaluations…</div>
+  <div id="fuzzy-loading" class="loading-msg">Loading ASF evaluations…</div>
   <div class="table-wrap hidden" id="fuzzy-table-wrap">
     <table id="fuzzy-table">
       <thead>
         <tr>
           <th>Player</th>
-          <th>PD <span class="th-sub">Pedagogy</span></th>
-          <th>TD <span class="th-sub">Technology</span></th>
-          <th>LD <span class="th-sub">Ludic</span></th>
-          <th>BD <span class="th-sub">Behaviour</span></th>
-          <th>Global Score</th>
-          <th>ML Level</th>
+          <th>Φ<sub>PD</sub> <span class="th-sub">Pedagogy</span></th>
+          <th>Φ<sub>TD</sub> <span class="th-sub">Technology</span></th>
+          <th>Φ<sub>LD</sub> <span class="th-sub">Ludic</span></th>
+          <th>Φ<sub>BD</sub> <span class="th-sub">Behaviour</span></th>
+          <th>Γ(x<sub>p</sub>) <span class="th-sub">ASF Score</span></th>
+          <th>GMM Label <span class="th-sub">annotative</span></th>
+          <th>Fuzzy Decision <span class="th-sub">threshold on Γ</span></th>
         </tr>
       </thead>
       <tbody id="fuzzy-body"></tbody>
@@ -136,23 +143,25 @@
   </div>
 </section>
 
-<!-- ML TABLE -->
+<!-- ML TABLE — GMM Classification -->
 <section class="section">
   <div class="section-title">
     <span class="section-icon">⬡</span>
-    ML Clustering Results
+    GMM Classification Results
+    <span class="th-sub" style="font-size:11px;color:var(--text-muted);">(used as annotation in ASF)</span>
     <button class="btn" onclick="loadML()">Refresh</button>
   </div>
-  <div id="ml-loading" class="loading-msg">Loading ML results…</div>
+  <div id="ml-loading" class="loading-msg">Loading GMM results…</div>
   <div class="table-wrap hidden" id="ml-table-wrap">
     <table id="ml-table">
       <thead>
         <tr>
           <th>Player</th>
-          <th>Level</th>
+          <th>GMM Level</th>
           <th>Cluster</th>
           <th>Model</th>
           <th>Score</th>
+          <th>Role in ASF</th>
         </tr>
       </thead>
       <tbody id="ml-body"></tbody>
