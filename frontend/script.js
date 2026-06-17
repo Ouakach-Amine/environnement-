@@ -94,23 +94,7 @@ function hideEl(id) { const e = document.getElementById(id); if (e) e.classList.
 // BANNIÈRE ASF — affichée une fois dans la page
 // ─────────────────────────────────────────────────────────────────────────────
 
-function renderASFBanner() {
-  const el = document.getElementById("asf-banner");
-  if (!el) return;
-  el.innerHTML = `
-    <div class="asf-banner">
-      <span class="asf-icon">∑</span>
-      <div class="asf-text">
-        <strong>Integration Method: Average Score Fusion (ASF)</strong>
-        <span>Γ(x<sub>p</sub>) = Σ<sub>D</sub> w̄<sub>D</sub> · Φ<sub>D</sub>(x<sub>p</sub>)</span>
-      </div>
-      <div class="asf-note">
-        GMM label (Beginner / Intermediate / Expert) is <em>annotative only</em> — 
-        it does not influence the numerical Fuzzy AHP score.
-        Group statistics Γ*<sub>L</sub> are computed post-hoc for analysis.
-      </div>
-    </div>`;
-}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RADAR CHART (Canvas pur)
@@ -220,7 +204,7 @@ function loadMetrics() {
           <span>Silhouette: higher=better (−1→1)</span>
           <span>DBI: lower=better (0=ideal)</span>
           <span>Composite = Silhouette + (1 − DBI_norm)</span>
-          <span class="asf-note-inline">GMM label used as annotation in ASF pipeline</span>
+          
         </div>`;
 
       document.getElementById("metrics-card").innerHTML = html;
@@ -258,13 +242,8 @@ function loadGameEval() {
       bl.textContent = lrn ? "✓ Learning Achieved" : "✗ Learning Not Achieved";
       bl.className   = "badge " + (lrn ? "yes" : "no");
 
-      // ── Badge méthode ASF ───────────────────────────────────────────────
-      const bm = document.getElementById("badge-method");
-      if (bm) {
-        bm.textContent = "ASF Integration";
-        bm.className   = "badge neutral";
-        bm.title       = "Average Score Fusion — GMM label annotatif uniquement";
-      }
+      // ── 
+      
 
       // ── Scores de dimension Φ_D (scores bruts, sans PPIF) ───────────────
       const scores = d.avg_scores || {};
@@ -352,18 +331,7 @@ function renderGroupStats(prof, integration) {
   }).join("");
 
   // Note sur la méthode d'intégration
-  const noteEl = document.getElementById("asf-integration-note");
-  if (noteEl && integration.method) {
-    noteEl.innerHTML = `
-      <div class="integration-note">
-        <span class="int-icon">∑</span>
-        <div>
-          <strong>${integration.method}</strong>
-          <br><small>${integration.description || ""}</small>
-        </div>
-      </div>`;
-    showEl("asf-integration-note");
-  }
+  
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -379,7 +347,7 @@ function loadFuzzy() {
   const bodyEl  = document.getElementById("fuzzy-body");
   const countEl = document.getElementById("fuzzy-count");
 
-  loadEl.textContent = "Loading latest ASF evaluations…";
+  loadEl.textContent = "Loading latest evaluations…";
   showEl("fuzzy-loading"); hideEl("fuzzy-table-wrap");
 
   fetch(`${API}/api/fuzzy-results?t=${Date.now()}`)
@@ -388,7 +356,7 @@ function loadFuzzy() {
       hideEl("fuzzy-loading");
 
       if (!data || data.length === 0) {
-        loadEl.textContent = "⏳ No ASF results yet — waiting for ML pipeline…";
+        loadEl.textContent = "⏳ No results yet — waiting for ML pipeline…";
         showEl("fuzzy-loading");
         return;
       }
@@ -413,7 +381,7 @@ function loadFuzzy() {
           <tr>
             <td>
               <strong>#${p.player_id}</strong>
-              ${method === "ASF" ? '<span class="asf-tag">ASF</span>' : ""}
+              
             </td>
             <td>
               ${scorePill(PD, "higher")}
@@ -481,11 +449,7 @@ function loadML() {
           <td>${p.cluster !== undefined ? p.cluster : "—"}</td>
           <td><code>${p.model || "—"}</code></td>
           <td>${scorePill(p.score, "higher")}</td>
-          <td>
-            <span class="gmm-role-badge" title="Ce label est utilisé comme annotation dans le pipeline ASF">
-              annotative in ASF
-            </span>
-          </td>
+          
         </tr>`).join("");
     })
     .catch(err => {
@@ -527,7 +491,7 @@ function toggleAutoRefresh() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 window.addEventListener("DOMContentLoaded", () => {
-  renderASFBanner();
+  
   loadMetrics();
   loadFuzzy();
   loadML();
