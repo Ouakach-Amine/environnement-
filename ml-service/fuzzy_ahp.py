@@ -387,7 +387,7 @@ doc = {
         "learning"     : gs >= .65,
         "orientation"  : orient,
         "dominant_dim" : dom,
-        "summary"      : f"Score global Γ̄={gs:.3f} — {label(gs)} (méthode ASF)",
+        "summary"      : f"Score global Γ̄={gs:.3f} — {label(gs)} ",
     },
     "dim_weights"   : {DIM_L[i]: round(dw[i], 4) for i in range(4)},
 

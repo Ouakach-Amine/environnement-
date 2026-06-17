@@ -231,7 +231,8 @@ function loadGameEval() {
 
       // ── Verdict global ──────────────────────────────────────────────────
       document.getElementById("eval-rating").textContent  = d.verdict?.rating  || "—";
-      document.getElementById("eval-summary").textContent = d.verdict?.summary  || "";
+      const summaryText = (d.verdict?.summary || "").replace(/\s*\(méthode ASF\)/i, "");
+document.getElementById("eval-summary").textContent = summaryText;
 
       const sat = d.verdict?.satisfied ?? false;
       const lrn = d.verdict?.learning  ?? false;
